@@ -1,3 +1,13 @@
+
+
+# vscode / pycharm / eclipse
+/.vscode
+/.settings
+/.idea
+/.project
+/.pydevproject
+
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
@@ -69,7 +79,9 @@ instance/
 .scrapy
 
 # Sphinx documentation
+docs/_api/
 docs/_build/
+docs/_static/
 
 # PyBuilder
 target/
