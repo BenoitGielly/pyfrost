@@ -16,6 +16,9 @@ You don't have to, but mentioning my name whenever you use source code from here
 
 You can find a generated sphinx documentation at <https://pyfrost-maya.readthedocs.io/en/latest/>
 
+Please feel free to either submit a ticket on this repo, or email me directly at benoit.gielly@gmail.com if you find any issues.
+Having context would be a plus, with maybe a code snippet that doesn't work or whatever material you used to generate the error.
+
 # Installation
 
 `PyFrost` requires Autodesk Maya >= 2018 and the latest version of [Bifrost](https://makeanything.autodesk.com/bifrost), currently [2.2.0.1](https://help.autodesk.com/view/BIFROST/ENU/?guid=Bifrost_ReleaseNotes_release_notes_release_notes_2_2_0_0_html)
