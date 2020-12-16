@@ -1,5 +1,17 @@
 # Release Notes
 
+## 1.1.0 (2020-12-16)
+
+-   Changed attribute access across all API
+
+Removed some logic in the API that was too complicated.
+It was using the `__getattr__` method first to get nodes and attributes,
+but it ended requiring extra methods for when you wanted to pass nodes as strings
+like graph.node("node") or node.attr("attribute").
+I have removed all that and decided to use `__getitem__` instead,
+which also prevents attribute clashing with builtin methods.
+
+
 ## 1.0.0 (2020-12-10)
 
 -   First public release
