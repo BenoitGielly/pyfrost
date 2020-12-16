@@ -21,7 +21,7 @@ You can find a generated sphinx documentation at <https://pyfrost-maya.readthedo
 `PyFrost` requires Autodesk Maya >= 2018 and the latest version of [Bifrost](https://makeanything.autodesk.com/bifrost), currently [2.2.0.1](https://help.autodesk.com/view/BIFROST/ENU/?guid=Bifrost_ReleaseNotes_release_notes_release_notes_2_2_0_0_html)
 
 You can find a module file available in `pyfrost\src\module\modules\` which you can add to the `MAYA_MODULE_PATH` environment variable.
-It'll allow Maya to pick up the whole repo automatically for you on startup.
+It'll allow Maya to pick up the whole repository automatically for you on startup.
 
 You can always run `sys.path.append()` on the python source folder `pyfrost\src`.
 
@@ -29,25 +29,41 @@ You can always run `sys.path.append()` on the python source folder `pyfrost\src`
 
 Once the module is installed, all you need to do is to run `import pyfrost` inside Maya.
 
-Please note that importing `pyfrost.main` may cause a freeze of Maya as it's also ensuring the `bifrostGraph` plugin is loaded, which is taking some time.
+Please note that importing `pyfrost.main` may cause a small freeze as it's also loading the `bifrostGraph` plugin, which can take some time.
 
 Example multiply node:
 
 ```python
+import pyfrost.main
+
+# create a new graph node
 graph = pyfrost.main.Graph("multiplyNode")
 
-mult = graph.create_node("multiply")
-
+# get the input node and add a "value1" float output
 root = graph["/input"]
-root.value1.add("output", "float")
-root.value2.add("output", "float")
-root.value1 >> mult.value1
-root.value2 >> mult.value2
-mult.output >> graph["/output"].result
-```
+root["value1"].add("output", "float")
 
-If you don't like the `>>` operator to connect nodes, you can always use the `Attribute.connect()` method.
+# you can also just stack the full path with its attribute
+graph["/input.value2"].add("output", "float")
 
-```python
-root.value1.connect(mult.value1)
+# or you can keep the ports separated if you prefer to
+graph["/input"]["value3"].add("output", "float")
+
+# create a new multiply node
+# Note: you can find the nodetype in the scriptEditor by creating a node manually first.
+# Then remove the "BifrostGraph," that shows up before the node type
+mult = graph.create_node("Core::Math,multiply")
+
+# to connect you can use the bitwise operator
+root["value1"] >> mult["value1"]
+
+# if a port doesn't exist on either the target or the source,
+# it will try to create a new one with the type set to "auto"
+root["value2"] >> mult["new_value"]
+
+# you can also use the default method for connection
+graph["/input"]["value3"].connect(mult["another_value"])
+
+# now lets connect that to the output of the graph
+mult["output"] >> graph["/output"]["result"]
 ```
