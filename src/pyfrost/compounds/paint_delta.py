@@ -1,6 +1,10 @@
-"""Create a painDelta bifrost compound.
+"""Create a paintDelta bifrost compound.
 
 :author: Benoit Gielly <benoit.gielly@gmail.com>
+
+Based on the compound created by Iker J. de los Mozos:
+https://forums.autodesk.com/t5/bifrost-forum/paintdeltamap-compound/td-p/8972674
+
 """
 
 from .. import main

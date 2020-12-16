@@ -1,5 +1,10 @@
 # Release Notes
 
+## 1.1.1 (2020-12-16)
+
+- Hotfix to the `from_json` method that still used the previous API version
+
+
 ## 1.1.0 (2020-12-16)
 
 -   Changed attribute access across all API

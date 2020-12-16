@@ -109,7 +109,7 @@ class Graph(object):
             name = each.get("portName")
             direction = each.get("portDirection")
             type_ = each.get("portType", "auto")
-            compound.attr(name).add(direction, type_)
+            compound[name].add(direction, type_)
 
         # create nodes
         for each in data.get("compoundNodes", []):
@@ -119,14 +119,14 @@ class Graph(object):
                 type_ = "Core::Constants," + each.get("valueType")
             node = self.create_node(type_, parent=compound, name=name)
             for port in each.get("multiInPortNames", []):
-                node.attr(port).add("input")
+                node[port].add("input")
             for meta in each.get("metadata", []):
                 node.set_metadata((meta["metaName"], meta["metaValue"]))
 
         # create connections
         for each in data.get("connections", []):
-            source = self.get(compound / each.get("source"))
-            target = self.get(compound / each.get("target"))
+            source = compound[each.get("source")]
+            target = compound[each.get("target")]
             source.connect(target)
 
         # set values
@@ -142,7 +142,7 @@ class Graph(object):
                 )
             else:
                 value = str(value)
-            self.get(compound / name).set(value)
+            compound["/" + name].value = value
 
         return compound
 
@@ -172,8 +172,22 @@ class Node(object):
         return str(self.path)
 
     def __getitem__(self, key):
+        # handles ".first." attribute
+        if ".first." in key:
+            key = key.replace(".first.", ".")
+
+        # handles normal node path
         if key.startswith("/"):
             return self.node(key)
+
+        # handles duplicate dots (node..attr)
+        if key.startswith("."):
+            key = key[1:]
+
+        # handles key "node.attr" not starting with "/"
+        if "." in key and not key.startswith("."):
+            return self.node("/" + key)
+
         return self.attr(key)
 
     def attr(self, value):
