@@ -6,6 +6,8 @@ Bifrost VNN command documentation
 https://help.autodesk.com/view/BIFROST/ENU/?guid=__CommandsPython_index_html
 
 """
+from __future__ import absolute_import, print_function
+
 import json
 import logging
 import os
@@ -15,48 +17,20 @@ from maya import cmds
 
 LOG = logging.getLogger(__name__)
 
-NODE_LIBS = {
-    # constant
-    "float": "Core::Constants,float",
-    "string": "Core::Constants,string",
-    # generic
-    "number_to_string": "Core::String,number_to_string",
-    # arrays
-    "build_array": "Core::Array,build_array",
-    # vectors
-    "vector3_to_scalar": "Core::Conversion,vector3_to_scalar",
-    "scalar_to_vector3": "Core::Conversion,scalar_to_vector3",
-    "scalar_to_vector4": "Core::Conversion,scalar_to_vector4",
-    # maths
-    "add": "Core::Math,add",
-    "subtract": "Core::Math,subtract",
-    "multiply": "Core::Math,multiply",
-    "divide": "Core::Math,divide",
-    "power": "Core::Math,power",
-    "square_root": "Core::Math,square_root",
-    # geometry
-    "get_point_position": "Geometry::Properties,get_point_position",
-    "set_geo_property": "Geometry::Properties,set_geo_property",
-}
 
 if not cmds.pluginInfo("bifrostGraph", query=True, loaded=True):
     cmds.loadPlugin("bifrostGraph")
 
 
 class Graph(object):
-    """Create a bifrost graph with convient methods."""
+    """Create a new bifrost graph object."""
 
     board_name = "default"
 
     def __init__(self, board=None):
-        self.board = self.get_board(board)
+        self.board = self._validate_board(board)
+        self._create_name_attribute()
         self._nodes = []
-
-        # add a string attribute to identify the board
-        node_attr = self.board + ".board_name"
-        if not cmds.objExists(node_attr):
-            cmds.addAttr(self.board, longName="board_name", dataType="string")
-        cmds.setAttr(node_attr, self.board_name, type="string")
 
     def __repr__(self):
         return '{}("{}")'.format(self.__class__.__name__, self.board)
@@ -64,11 +38,31 @@ class Graph(object):
     def __str__(self):
         return self.board
 
-    def __getitem__(self, value):
-        return self.get(value)
+    def __getitem__(self, key):
+        return self.get(key)
+
+    def get(self, name):
+        """Get given string as node or attr."""
+        if name is None:
+            return name
+
+        name, _, attr = name.partition(".")
+        node = Node(self, name)
+        if attr:
+            attr = attr.replace(".first.", ".")  # wtf??
+            return node[attr]
+        return node
+
+    def _create_name_attribute(self):
+        """Create a name attribute to identify the board."""
+        # add a string attribute to identify the board
+        node_attr = self.board + ".board_name"
+        if not cmds.objExists(node_attr):
+            cmds.addAttr(self.board, longName="board_name", dataType="string")
+        cmds.setAttr(node_attr, self.board_name, type="string")
 
     @staticmethod
-    def get_board(name=None):
+    def _validate_board(name=None):
         """Get existing or create new BifrostBoard."""
         if name and cmds.objExists(name):
             if cmds.nodeType(name) == "bifrostBoard":
@@ -90,22 +84,11 @@ class Graph(object):
     def nodes(self):
         """Get nodes at the board/root level."""
         children = cmds.vnnCompound(self.board, "/", listNodes=True) or []
-        return [self[x] for x in children]
+        return [self.get(x) for x in children]
 
     def create_node(self, type_, parent="/", name=None):
         """Create a new bifrost node in the graph."""
         return Node(self, parent, type_, name)
-
-    def get(self, value):
-        """Get given string as node or attr."""
-        if "." in value:
-            node, attr = value.replace(".first.", ".").split(".", 1)  # wtf??
-            return Node(self, node).attr(attr)
-        return Node(self, value)
-
-    def node(self, *path):
-        """Get an existing bifrost node in the graph."""
-        return Node(self, "/".join([str(x) for x in path]))
 
     def from_json(self, path):  # WIP
         """Create a compound from JSON file."""
@@ -188,15 +171,23 @@ class Node(object):
     def __str__(self):
         return str(self.path)
 
-    def __add__(self, value):
-        return "{}{}".format(self.path, value)
+    def __getitem__(self, key):
+        if key.startswith("/"):
+            return self.node(key)
+        return self.attr(key)
 
-    def __div__(self, value):
-        separator = "" if str(value).startswith((".", "/")) else "/"
-        return "{}{}{}".format(self.path, separator, value)
+    def attr(self, value):
+        """Return the attribute class."""
+        return Attribute(self, value)
 
-    def __getattr__(self, attribute):
-        return self.attr(attribute)
+    def node(self, value):
+        """Get a child of this node."""
+        if "." in value:
+            node, attr = value.split(".", 1)
+            node = self.node(node)
+            return node[attr]
+        node = "/".join([self.path, value]).replace("//", "/")
+        return Node(self, node)
 
     def get_children(self):
         """Get children nodes."""
@@ -221,8 +212,6 @@ class Node(object):
         else:
             nodetype = self._fix_type(nodetype)
             type_ = self.board + "," + nodetype
-            if nodetype in NODE_LIBS:
-                type_ = self.board + "," + NODE_LIBS[nodetype]
             separator = "" if path.endswith("/") else "/"
             node = cmds.vnnCompound(self.board, path, addNode=type_)[0]
             node = "{}{}{}".format(path, separator, node)
@@ -236,15 +225,21 @@ class Node(object):
         self.rename(name)
 
     def rename(self, name):
-        """Rename node."""
+        """Rename node.
+
+        Note:
+            the `renameNode` option doesn't return the new name, so the
+            only way to figure out the unique name is to query all nodes,
+            rename, query again and diff...(cool stuff, right?!)
+        """
         if not name or self.name == name:
             return None
 
         all_nodes = cmds.vnnCompound(self.board, self.parent, listNodes=True)
         cmds.vnnCompound(self.board, self.parent, renameNode=[self.name, name])
         new_nodes = cmds.vnnCompound(self.board, self.parent, listNodes=True)
-
         node = list(set(new_nodes) - set(all_nodes))[0]
+
         self.path = self.parent + node
         return self.path
 
@@ -255,15 +250,6 @@ class Node(object):
         if not "," in split[-1]:
             type_ = ",".join(split)
         return type_
-
-    def node(self, path):
-        """Get a child of this node."""
-        node = "/".join([self.path, path]).replace("//", "/")
-        return Node(self, node)
-
-    def attr(self, attribute):
-        """Return the attribute class."""
-        return Attribute(self, attribute)
 
     # Properties ---
     @property
@@ -290,27 +276,28 @@ class Node(object):
     @property
     def type(self):
         """Get node's type."""
-        type_ = cmds.vnnNode(self.board, self, queryTypeName=True)
-        return self._fix_type(type_)
+        type_ = cmds.vnnNode(self.board, self.path, queryTypeName=True)
+        type_ = self._fix_type(type_)
+        if type_.lower().startswith(self.board.lower()):
+            type_ = type_.split(",", 1)[-1]
+        return type_
 
     @property
     def uuid(self):
         """Get node's UUID."""
-        return cmds.vnnNode(self.board, self, queryMetaData="UUID") or None
+        return cmds.vnnNode(self.board, self.path, queryMetaData="UUID")
 
     def set_metadata(self, metadata):
         """Set node metadata."""
-        cmds.vnnNode(self.board, self, setMetaData=metadata)
+        cmds.vnnNode(self.board, self.path, setMetaData=metadata)
 
 
 class Attribute(object):
     """Create Attribute object."""
 
     def __init__(self, node_object, attribute=None):
-        if attribute == "__apiobject__":  # maya whatever...
-            raise RuntimeError()
-
         self.node = node_object
+        self.parent = str(node_object)
         self.board = self.node.board
         self.name = attribute
         self.plug = "{}.{}".format(node_object, attribute)
@@ -333,49 +320,45 @@ class Attribute(object):
     def exists(self):
         """Check if attribute exists."""
         existing = []
-        for each in cmds.vnnNode(self.board, self.node, listPorts=True) or []:
+        nodes = cmds.vnnNode(self.board, str(self.node), listPorts=True) or []
+        for each in nodes:
             existing.append(each.split(".", 1)[-1])
         return self.name in existing
 
     @property
     def type(self):
         """Get attribute type."""
-        return cmds.vnnNode(self.board, self.node, queryPortDataType=self.name)
+        return cmds.vnnNode(
+            self.board, str(self.node), queryPortDataType=self.name
+        )
 
-    # @property
-    # def value(self):
-    #     """Query or set plug default value."""
-    #     node = self.node if self.node.type else self.node.parent
-    #     return cmds.vnnNode(self.board, node, queryPortDefaultValues=self.name)
-
-    # @value.setter
-    # def value(self, value):
-    #     self.set(value)
-
-    def get(self):
-        """Get attribute value."""
+    @property
+    def value(self):
+        """Get and set attribute value."""
         node = self.node if self.node.type else self.node.parent
-        return cmds.vnnNode(self.board, node, queryPortDefaultValues=self.name)
+        return cmds.vnnNode(
+            self.board, str(node), queryPortDefaultValues=self.name
+        )
 
-    def set(self, value):
-        """Set attribute value."""
+    @value.setter
+    def value(self, value):
+        if not value and not isinstance(value, (int, float, bool, str)):
+            return
         kwargs = {"setPortDefaultValues": [self.name, value]}
         if self.node.parent == "/" and not self.node.type:
             cmds.vnnCompound(self.board, self.node.parent, **kwargs)
             return
         node = self.node if self.node.type else self.node.parent
-        cmds.vnnNode(self.board, node, **kwargs)
+        cmds.vnnNode(self.board, str(node), **kwargs)
 
     def add(self, direction, datatype="auto", value=None):
         """Add input plug on given node."""
         if not direction in ("input", "output"):
             raise NameError('`direction` must be either "input" or "output"')
-        key = "createInputPort" if direction == "input" else "createOutputPort"
-
+        key = "create{}Port".format(direction.title())
         cmd = cmds.vnnCompound if self.node.is_compound else cmds.vnnNode
-        cmd(self.board, self.node, **{key: [self.name, datatype]})
-
-        _ = self.set(value) if value else None
+        cmd(self.board, str(self.parent), **{key: [self.name, datatype]})
+        self.value = value
 
     def connect(self, target):
         """Connect plugs."""
@@ -385,8 +368,8 @@ class Attribute(object):
             target.add("input", self.type)
         if not target.exists:
             target.add("input")
-        cmds.vnnConnect(self.board, self, target)
+        cmds.vnnConnect(self.board, self.plug, target.plug)
 
     def disconnect(self, target):
         """Disconnect plugs."""
-        cmds.vnnConnect(self.board, self, target, disconnect=True)
+        cmds.vnnConnect(self.board, self.plug, target.plug, disconnect=True)
